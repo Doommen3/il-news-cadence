@@ -29,13 +29,13 @@ def load_outlet_metrics(days: int):
         outlets = con.execute("SELECT outlet_id, name, outlet_type, owner, counties_fips FROM outlets").fetch_df()
         # Return empty metrics merged to outlets for consistent columns
         empty_cols = {
-            "total_articles": pd.Series(dtype="int64"),
-            "days_active": pd.Series(dtype="int64"),
-            "avg_posts_per_day": pd.Series(dtype="float64"),
-            "median_gap_days": pd.Series(dtype="float64"),
-            "freshness_days": pd.Series(dtype="float64"),
+            "total_articles": 0,
+            "days_active": 0,
+            "avg_posts_per_day": 0.0,
+            "median_gap_days": np.nan,
+            "freshness_days": np.nan,
         }
-        return outlets.assign(**{k: np.nan for k in empty_cols})
+        return outlets.assign(**empty_cols)
 
     # Ensure UTC-aware timestamps
     art["published_at"] = pd.to_datetime(art["published_at"], utc=True, errors="coerce")
@@ -67,6 +67,10 @@ def load_outlet_metrics(days: int):
     # Enrich with outlet metadata
     outlets = con.execute("SELECT outlet_id, name, outlet_type, owner, counties_fips FROM outlets").fetch_df()
     df = outlets.merge(metrics, on="outlet_id", how="left")
+    # Fill missing counts with 0 to avoid None values in the UI
+    df[["total_articles", "days_active", "avg_posts_per_day"]] = (
+        df[["total_articles", "days_active", "avg_posts_per_day"]].fillna(0)
+    )
     return df.sort_values("total_articles", ascending=False, na_position="last")
 
 st.title("Illinois News Cadence")

@@ -13,20 +13,28 @@ def compute_outlet_metrics(con, days):
           AND published_at <= now() + INTERVAL 1 DAY
     """).fetch_df()
 
+    outlets = con.execute("SELECT outlet_id FROM outlets").fetch_df()
+
     if df.empty:
-        return pd.DataFrame(columns=[
-            "outlet_id","total_articles","days_active",
-            "avg_posts_per_day","median_gap_days","freshness_days"
-        ])
+        return outlets.assign(
+            total_articles=0,
+            days_active=0,
+            avg_posts_per_day=0.0,
+            median_gap_days=np.nan,
+            freshness_days=np.nan,
+        )
 
     # Force UTC-aware timestamps
     df["published_at"] = pd.to_datetime(df["published_at"], utc=True, errors="coerce")
     df = df.dropna(subset=["published_at"])
     if df.empty:
-        return pd.DataFrame(columns=[
-            "outlet_id","total_articles","days_active",
-            "avg_posts_per_day","median_gap_days","freshness_days"
-        ])
+        return outlets.assign(
+            total_articles=0,
+            days_active=0,
+            avg_posts_per_day=0.0,
+            median_gap_days=np.nan,
+            freshness_days=np.nan,
+        )
 
     df["date"] = df["published_at"].dt.date
     grp = df.groupby("outlet_id", as_index=False)
@@ -57,7 +65,13 @@ def compute_outlet_metrics(con, days):
     md = pd.DataFrame(med_gaps, columns=["outlet_id","median_gap_days"])
     fr = pd.DataFrame(freshness, columns=["outlet_id","freshness_days"])
     out = stats.merge(md, on="outlet_id", how="left").merge(fr, on="outlet_id", how="left")
-    return out
+
+    # Merge with full outlet list to include outlets with no articles
+    full = outlets.merge(out, on="outlet_id", how="left")
+    full[["total_articles", "days_active", "avg_posts_per_day"]] = (
+        full[["total_articles", "days_active", "avg_posts_per_day"]].fillna(0)
+    )
+    return full
 
 def rollup_counties(con, outlet_metrics):
     outlets = con.execute("SELECT outlet_id, name, counties_fips FROM outlets").fetch_df()
