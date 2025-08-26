@@ -1,0 +1,17 @@
+
+# Python / env
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Project artifacts
+outputs/
+data/news.duckdb
+
+# Streamlit
+.streamlit/
+
+# Editors
+.vscode/
+.idea/

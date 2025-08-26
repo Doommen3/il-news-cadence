@@ -1,0 +1,6 @@
+outlet_id,name,homepage_url,rss_url,outlet_type,owner,counties_fips
+shaw_daily_chronicle,Daily Chronicle (DeKalb),https://www.shawlocal.com/daily-chronicle/,,newspaper,Shaw Local,17037
+newstrib,NewsTribune (LaSalle/Peru/Ottawa),https://www.newstrib.com/,,newspaper,Shaw Local,17099
+mendota_reporter,Mendota Reporter,https://mendotareporter.com/,,newspaper,News Media Corporation,17099
+chicago_tribune,Chicago Tribune,https://www.chicagotribune.com/,,newspaper,Tribune Publishing,17031|17043|17089
+sun_times,Chicago Sun-Times,https://chicago.suntimes.com/,,newspaper,Chicago Sun-Times,17031|17043|17089

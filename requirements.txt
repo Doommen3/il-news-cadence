@@ -1,0 +1,10 @@
+duckdb==1.1.2
+pandas==2.2.2
+feedparser==6.0.11
+requests==2.32.3
+beautifulsoup4==4.12.3
+python-dateutil==2.9.0.post0
+tqdm==4.66.4
+tenacity==8.3.0
+streamlit==1.36.0
+plotly==5.22.0
