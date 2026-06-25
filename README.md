@@ -1,84 +1,105 @@
-# Illinois News Cadence (MVP)
+<div align="center">
 
-Measure and visualize how frequently Illinois news outlets publish, and roll it up to counties.
+# Illinois News Cadence
 
-**MVP features**
-- Harvest recent article metadata (title, URL, publish time) from RSS feeds (preferred) or sitemaps (fallback).
-- Store into DuckDB.
-- Compute outlet‑level cadence metrics and a county‑level **Coverage Frequency Index (CFI)**.
-- Streamlit app with an Illinois county choropleth and outlet table.
+**Measure how often Illinois news outlets publish, and roll the cadence up to county-level coverage.**
 
-> This is a starter project intended for local execution. You will need to expand the outlet list over time.
-> The harvester is polite: it prefers RSS and sitemaps, obeys robots.txt by default (requests respects it indirectly) and throttles requests.
+![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?style=flat&logo=python&logoColor=white)
+![DuckDB](https://img.shields.io/badge/DuckDB-FFF000?style=flat&logo=duckdb&logoColor=black)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white)
+![pandas](https://img.shields.io/badge/pandas-150458?style=flat&logo=pandas&logoColor=white)
+![Plotly](https://img.shields.io/badge/Plotly-3F4F75?style=flat&logo=plotly&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
----
+</div>
 
-## Quickstart
+## Overview
+
+Illinois News Cadence harvests recent article metadata from local news outlets, stores it in a DuckDB database, and computes how frequently each outlet publishes. Those per-outlet rates are rolled up into a county-level **Coverage Frequency Index (CFI)** so you can see where local news is dense and where coverage is thin. An interactive Streamlit app renders the results as an Illinois county choropleth alongside sortable outlet tables. The project is an MVP designed for local execution; the starter outlet list is meant to be expanded over time.
+
+## Features
+
+- Harvest article metadata (title, URL, publish time) from RSS/Atom feeds, with sitemap parsing as a fallback.
+- Automatic RSS discovery: probes common feed paths and parses `<link rel="alternate">` tags when no feed URL is configured.
+- Polite harvesting with a custom User-Agent, per-request timeouts, and configurable throttling between outlets.
+- Deduplication by SHA-1 URL hash with a `UNIQUE` constraint so re-runs don't double-count articles.
+- Per-outlet metrics: total articles, days active, average posts per day, median gap between posts, and freshness (days since last post).
+- County rollup via the Coverage Frequency Index, splitting each outlet's posts/day evenly across the counties it covers.
+- Streamlit dashboard with an adjustable lookback window, selectable map metric, county choropleth, and CSV export of outlet metrics.
+
+## Tech stack
+
+- **Python 3.9+**
+- **DuckDB** — embedded analytical database (`data/news.duckdb`)
+- **feedparser** — RSS/Atom parsing
+- **requests** + **BeautifulSoup4** — HTTP and HTML/XML (sitemap) parsing
+- **pandas** + **NumPy** — metric computation
+- **python-dateutil** — flexible date parsing
+- **tqdm**, **tenacity** — progress and retries
+- **Streamlit** + **Plotly** — interactive dashboard and choropleth map
+
+## How it works
+
+1. **Seed** — `data/il_outlets.csv` lists outlets with their homepage, optional RSS URL, type, owner, and pipe-delimited Illinois county FIPS codes.
+2. **Build** — `scripts/build_db.py` creates the `outlets`, `articles`, and `county_metrics` tables in DuckDB and loads the outlet CSV.
+3. **Harvest** — `scripts/harvest.py` fetches recent articles per outlet (RSS first, sitemap fallback), filters to a lookback window, and inserts deduplicated rows into `articles`.
+4. **Compute** — `scripts/compute_metrics.py` aggregates per-outlet cadence statistics and rolls them up to a per-county CFI, writing back to `county_metrics` and to CSVs under `outputs/`.
+5. **Visualize** — `app/app.py` reads the database and renders the county map plus outlet tables in Streamlit.
+
+The Coverage Frequency Index (CFI) for a county is the sum, over every outlet covering that county, of the outlet's posts-per-day in the window, with each outlet's rate divided equally across all counties it serves. Locality weighting and syndication de-duplication are future enhancements.
+
+## Getting started
+
+### Prerequisites
+
+- Python 3.9 or newer
+
+### Installation
 
 ```bash
-# 1) Create and activate a virtual environment (recommended)
+# 1) Create and activate a virtual environment
 python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
 # 2) Install dependencies
 pip install -r requirements.txt
+```
 
-# 3) Initialize DB and seed outlets
+### Run the pipeline
+
+```bash
+# 3) Initialize the database and load the seed outlets
 python scripts/build_db.py
 
-# 4) Harvest last 365 days (RSS first, sitemap fallback)
+# 4) Harvest the last 365 days (RSS first, sitemap fallback)
 python scripts/harvest.py --days 365 --max-per-outlet 2000
 
-# 5) Compute metrics and county rollups
+# 5) Compute outlet metrics and county rollups
 python scripts/compute_metrics.py --days 365
 
-# 6) Run the Streamlit app
+# 6) Launch the dashboard
 streamlit run app/app.py
 ```
 
-The Streamlit app lets you pick the date window, metric (e.g., CFI, total articles, avg/day), and filter by outlet type.
+> **Note:** `compute_metrics.py` writes CSVs to an `outputs/` directory. Create it first (`mkdir -p outputs`) if it does not exist.
 
----
+### Harvest options
 
-## Data model
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--days` | `365` | Lookback window in days |
+| `--max-per-outlet` | `2000` | Cap on items fetched per outlet |
+| `--throttle` | `1.0` | Seconds to sleep between outlets |
+| `--only-outlet-id` | `None` | Harvest a single outlet by ID |
 
-- `data/news.duckdb` (DuckDB file)
-- Tables:
-  - `outlets(outlet_id, name, homepage_url, rss_url, outlet_type, owner, counties_fips)`
-    - `counties_fips`: JSON array of county FIPS (strings) the outlet covers (e.g., `["17037","17099"]`).
-  - `articles(article_id, outlet_id, url, title, published_at, source, retrieved_at, hash)`
-  - `county_metrics(county_fips, metric_date, cfi, total_articles, outlets_active, freshness_p50_days, avg_posts_per_day)`
+### Extend the outlet list
 
-**CFI (Coverage Frequency Index)** (MVP): sum over outlets covering the county of each outlet's **posts per day** in the window, divided equally across all counties that outlet covers. (Locality weighting and syndication down‑weighting can be added later.)
+Edit `data/il_outlets.csv` to add outlets. `homepage_url` is required; `rss_url` may be blank (the harvester attempts discovery). Provide one or more Illinois county FIPS codes separated by `|` (for example, `17031|17043`). Illinois county FIPS codes all begin with `17`.
 
----
+## Author
 
-## Files & Folders
+**Devin Oommen** — [devinoommen.com](https://devinoommen.com) · Oommen & Company
 
-- `data/il_outlets.csv` – starter list of Illinois outlets with their IL county FIPS coverage.
-- `scripts/build_db.py` – create DB and load outlets.
-- `scripts/harvest.py` – fetch article metadata (RSS preferred; sitemap fallback), write to DB.
-- `scripts/compute_metrics.py` – compute outlet metrics + roll up to counties.
-- `app/app.py` – Streamlit UI (map + tables).
-- `requirements.txt` – dependencies.
+## License
 
----
-
-## Extend the outlet list
-
-Edit `data/il_outlets.csv` to add or update outlets:
-- `homepage_url` is required; `rss_url` can be blank (the harvester tries discovery).
-- `counties_fips` accepts multiple FIPS as a pipe `|` separator (e.g., `17031|17043`).
-- FIPS for Illinois counties all start with `17xxx`.
-- Good seed sources (for you to curate and paste in here): Northwestern Medill "State of Local News" inventory; Illinois Press Association directory.
-
----
-
-## Notes & next steps
-
-- Add a "locality score" using spaCy NER on article excerpts, and weight CFI accordingly.
-- Detect chain‑wide duplicates via MinHash/LSH and down‑weight.
-- Backfill historical metrics (2019→present) using GDELT or archived sitemaps for trends.
-- Add per‑capita CFI once ACS county populations are joined.
-- Add alerting for outlets that stop publishing (freshness > X days).
-
+Released under the [MIT License](LICENSE).
